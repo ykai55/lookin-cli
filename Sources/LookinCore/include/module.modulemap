@@ -1,0 +1,4 @@
+module LookinCore {
+    umbrella header "LookinCore.h"
+    export *
+}
