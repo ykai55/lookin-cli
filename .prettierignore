@@ -1,0 +1,8 @@
+# Build / derived artifacts
+.build/
+
+# SPM-managed lockfile (rewritten on every resolve)
+Package.resolved
+
+# Vendored third-party source (kept verbatim)
+Sources/LookinCore/
