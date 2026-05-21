@@ -26,9 +26,9 @@ cp .build/release/lookin /usr/local/bin/   # optional
 Run these in order. Each command prints JSON to stdout.
 
 ```bash
-# 1. Sanity check — confirm LookinServer is reachable
+# 1. Sanity check — per-port LookinServer diagnostics
 lookin doctor --pretty
-# {"target":"simulator","host":"127.0.0.1","port":47164,"reachable":true,"serverVersion":7,...}
+# {"reachable":true,"reason":"ok","port":47164,"serverVersion":7,"probeMs":118,"ports":[...]}
 
 # 2. Discover and save a session
 lookin attach --pretty
@@ -104,15 +104,32 @@ roots[].{
 
 ```
 attributes[].{
-  group      String   -- LookinServer attribute group identifier
+  group      String   -- LookinServer attribute group short code (e.g. "vl", "l")
+  groupName  String?  -- decoded group label (e.g. "View & Layer"); null if unknown
   section    String   -- LookinServer attribute section identifier
   identifier String   -- LookinServer internal short code (e.g. "l_f_f", "c_c_c")
+  name       String?  -- decoded human-readable label (e.g. "Corner Radius"); null if unknown
   attrType   Int      -- raw LookinAttrType enum value
   value      String | Number | Bool | {x,y,w,h} | {r,g,b,a} | null
 }
 ```
 
 All commands accept `--pretty` for human-readable output.
+
+## lookin doctor
+
+`doctor` probes the whole LookinServer port range concurrently and reports a
+per-port diagnosis. The top-level `reason` field classifies the outcome:
+
+| `reason`                      | Meaning                                                                                                                                                                                           |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ok`                          | A LookinServer answered the ping; `port` / `serverVersion` are set.                                                                                                                               |
+| `no_listener`                 | Nothing is listening. LookinServer not linked, app not in Debug, or the app is not foreground-active yet — a system modal (e.g. the ATT prompt) delays the listener until the app becomes active. |
+| `port_in_use_by_other_client` | A port is held by another client. LookinServer is single-client — the Lookin macOS app or another `lookin-cli` is connected. Detected when the socket is `established` rather than `listen`.      |
+| `scan_timed_out`              | The scan exceeded its budget; the simulator/device may be unresponsive.                                                                                                                           |
+
+The `ports[]` array carries per-port detail: `tcp` (`open`/`closed`), `socket`
+(`listen`/`established`/`none`, from `lsof`), and `ping` (`ok`/`failed`/`skipped`).
 
 ## lookin measure
 
@@ -164,7 +181,9 @@ Absolute frames are computed by accumulating `frame.origin` down the view tree a
 
 - **Demo Route B.** Relies on LookinServer's existing peertalk-based wire protocol without modifying the app. Pinned to upstream commit `985e8afe` on `release/1.2.7` — see `docs/upstream/PINNED_COMMIT.md`.
 
-- **Internal attribute identifiers.** `lookin attributes` output uses LookinServer's internal short identifiers (`c_c_c`, `l_f_f`, etc.) rather than human-readable labels. A future pass should enrich these with the dashboard's label strings from `LookinDashboardBlueprint`.
+- **SwiftUI screens.** lookin's differentiator — the real `UIView`/`CALayer` tree with render-time properties (`cornerRadius`, `shadow`, `transform`, ivars) — is strongest on **UIKit-heavy** screens. SwiftUI renders `Text` / `Button` / shapes into anonymous `CGDrawingLayer` / `_UIGraphicsView` nodes: no text content, no control identity, and `cornerRadius` lives in a drawn path rather than `layer.cornerRadius`. On SwiftUI-heavy screens lookin's geometry largely overlaps an accessibility tree (`axe describe-ui`), and the differentiating attributes do not surface. Folding the a11y tree into `tree` output is planned follow-on work.
+
+- **Attribute identifiers.** `lookin attributes` decodes LookinServer's internal short codes (`c_c_c`, `l_f_f`, …) into `name` / `groupName` labels via a static table, keeping the raw codes alongside for reference. User-custom attributes outside the known set fall back to `name: null`.
 
 - **Screenshot reliability.** `lookin screenshot` works reliably for `UIImageView` (request 208) and for container views/layers (request 203 streaming). Bare `UILabel` and some leaf views may return empty data — LookinServer does not always materialize a solo snapshot for those nodes.
 

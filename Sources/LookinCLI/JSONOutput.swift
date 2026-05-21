@@ -65,8 +65,12 @@ public struct PublicRect: Encodable {
 
 public struct PublicAttribute: Encodable {
     public let group: String
+    /// Human-readable group label; `nil` when `group` is already a custom title.
+    public let groupName: String?
     public let section: String
     public let identifier: String
+    /// Human-readable attribute label decoded from `identifier`; `nil` if unknown.
+    public let name: String?
     public let attrType: Int
     public let value: PublicAttributeValue
 }
@@ -119,10 +123,17 @@ public func publicAttributes(from item: LookinDisplayItem) -> [PublicAttribute] 
             for attr in section.attributes ?? [] {
                 let attrId = attr.identifier ?? "(attr)"
                 let value = publicValue(from: attr)
+                // `displayTitle` is set only for user-custom attrs; otherwise
+                // decode the closed-set short code via the static label table.
+                let humanName = attr.displayTitle?.isEmpty == false
+                    ? attr.displayTitle
+                    : AttributeLabels.name(for: attrId)
                 result.append(PublicAttribute(
                     group: groupKey,
+                    groupName: AttributeLabels.groupName(for: groupKey),
                     section: sectionKey,
                     identifier: attrId,
+                    name: humanName,
                     attrType: Int(attr.attrType.rawValue),
                     value: value,
                 ))

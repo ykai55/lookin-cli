@@ -44,6 +44,12 @@ public enum PortScanner {
                 case .failed, .cancelled:
                     resumed = true
                     cont.resume(returning: false)
+                case .waiting:
+                    // Connection refused / no listener: NWConnection would retry
+                    // forever. Treat as unreachable and stop waiting immediately.
+                    resumed = true
+                    connection.cancel()
+                    cont.resume(returning: false)
                 default: break
                 }
             }

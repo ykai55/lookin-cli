@@ -42,6 +42,17 @@ public final class PeertalkTransport: LookinTransport {
                         startContinuation?.resume(throwing: err)
                         startContinuation = nil
                         failAllPending(LookinTransportError.io("\(err)"))
+                    case let .waiting(err):
+                        // NWConnection enters `.waiting` (not `.failed`) when the
+                        // peer refuses the connection or nothing is listening, then
+                        // retries indefinitely. Every lookin-cli connection is a
+                        // short-lived request/response, so `.waiting` always means
+                        // "cannot connect now" — fail fast instead of hanging until
+                        // the caller's request timeout fires.
+                        startContinuation?.resume(throwing: LookinTransportError.io("\(err)"))
+                        startContinuation = nil
+                        failAllPending(LookinTransportError.io("\(err)"))
+                        connection.cancel()
                     case .cancelled:
                         startContinuation?.resume(throwing: LookinTransportError.notConnected)
                         startContinuation = nil
