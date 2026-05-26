@@ -14,11 +14,22 @@ Demo. Hybrid Route B (zero app change required). macOS only. Simulator-first; re
 
 Tested against an iPhone 17 Pro simulator running a LookinServer-integrated app on port 47164.
 
-## Build
+## Install
+
+Via [Mint](https://github.com/yonaskolb/Mint) (recommended — no prebuilt binary needed, builds from source on first install):
+
+```bash
+brew install mint                            # one-time
+mint install shoujiaxin/lookin-cli           # or @<tag> to pin a version
+```
+
+Add `~/.mint/bin` to your `$PATH`, or invoke via `mint run shoujiaxin/lookin-cli lookin …`.
+
+Or build from source:
 
 ```bash
 swift build -c release
-cp .build/release/lookin /usr/local/bin/   # optional
+cp .build/release/lookin /usr/local/bin/     # optional
 ```
 
 ## Quickstart (simulator)
