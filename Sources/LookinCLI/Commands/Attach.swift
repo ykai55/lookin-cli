@@ -11,17 +11,31 @@ struct Attach: ParsableCommand {
 
     @OptionGroup var output: OutputOptions
 
-    @Flag(name: .long, help: "Target real device USB port range instead of simulator.")
+    @Flag(name: .long, help: "Connect directly to a USB device via usbmuxd.")
     var device: Bool = false
+
+    @Option(name: .long, help: "USB device UDID (required when multiple devices are connected).")
+    var udid: String?
+
+    mutating func validate() throws {
+        if udid != nil, !device { throw ValidationError("--udid requires --device.") }
+    }
 
     func run() throws {
         let target: PortScanner.Target = device ? .device : .simulator
-        let result = try runAsync { try await Attach.probe(target: target) }
+        let usbDevice: USBMux.Device? = try runAsync {
+            guard device else { return nil }
+            let devices = try await withRequestTimeout(seconds: 5) { try await USBMux.devices() }
+            return try USBMux.select(devices, udid: udid)
+        }
+        let result = try runAsync {
+            await resolveServer(target: target, deviceID: usbDevice?.id, timeoutSeconds: device ? 3 : 15)
+        }
 
-        guard let port = result.port, let serverVersion = result.serverVersion else {
+        guard let result else {
             var msg = "No LookinServer found"
             if device {
-                msg += ". Did you run `iproxy 47175 47175`?"
+                msg += ". Keep the iPhone unlocked and the app with LookinServer in the foreground. Disconnect other Lookin clients."
             } else {
                 msg += ". Is a simulator app with LookinServer running?"
             }
@@ -30,12 +44,13 @@ struct Attach: ParsableCommand {
         }
 
         let session = Session(
-            host: "127.0.0.1",
-            port: port,
+            host: device ? "usbmuxd" : "127.0.0.1",
+            port: result.port,
             target: device ? .device : .simulator,
-            serverVersion: serverVersion,
+            serverVersion: result.serverVersion,
             capturedAt: Date(),
             simulatorUDID: device ? nil : Attach.bootedSimulatorUDID(),
+            deviceUDID: usbDevice?.udid,
         )
         try session.save()
 
@@ -46,6 +61,7 @@ struct Attach: ParsableCommand {
             let serverVersion: Int
             let capturedAt: String
             let sessionPath: String
+            let deviceUDID: String?
         }
 
         let isoFormatter = ISO8601DateFormatter()
@@ -56,6 +72,7 @@ struct Attach: ParsableCommand {
             serverVersion: session.serverVersion,
             capturedAt: isoFormatter.string(from: session.capturedAt),
             sessionPath: Session.defaultPath.path,
+            deviceUDID: session.deviceUDID,
         )
         try emit(report, options: output)
         exitSuccess()
@@ -88,12 +105,5 @@ struct Attach: ParsableCommand {
             }
         }
         return nil
-    }
-
-    private static func probe(target: PortScanner.Target) async throws -> (port: UInt16?, serverVersion: Int?) {
-        if let result = await resolveServer(target: target) {
-            return (result.port, result.serverVersion)
-        }
-        return (nil, nil)
     }
 }

@@ -34,7 +34,7 @@ struct Screenshot: ParsableCommand {
     }
 
     static func fetchScreenshot(session: Session, viewOid: UInt) async throws -> Data? {
-        let transport = PeertalkTransport(host: session.host, port: session.port)
+        let transport = try await session.transport()
         defer { Task { await transport.close() } }
 
         // Step 1: Ping

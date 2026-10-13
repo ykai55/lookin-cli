@@ -45,7 +45,7 @@ struct Invoke: ParsableCommand {
     func run() throws {
         let session = try loadSession()
         let results: [Result] = try runAsync {
-            let transport = PeertalkTransport(host: session.host, port: session.port)
+            let transport = try await session.transport()
             defer { Task { await transport.close() } }
 
             let ping = LookinConnectionAttachment()

@@ -4,7 +4,7 @@ Tools like AXe, idb, and XcodeBuildMCP answer "what is interactable and where" b
 
 ## Status
 
-Demo. Hybrid Route B (zero app change required). macOS only. Simulator-first; real-device path is supported via `iproxy` (see below).
+Demo. Hybrid Route B (zero app change required). macOS only. Supports simulators over TCP and physical devices directly over USB through macOS's built-in usbmuxd service.
 
 ## Requirements
 
@@ -84,21 +84,32 @@ available exclusively to the CLI; disconnect the desktop Lookin client first.
 
 ## Real-device path
 
-For physical devices, forward the LookinServer port over USB before running any command:
-
-```bash
-iproxy 47175 47175   # run in a separate terminal, keep it alive
-```
-
-Then pass `--device` to any command:
+Connect and trust the iPhone over USB, unlock it, and keep the app containing
+LookinServer in the foreground. The CLI connects directly to `/var/run/usbmuxd`;
+no `iproxy`, desktop Lookin app, or background forwarding process is required.
 
 ```bash
 lookin doctor --device --pretty
 lookin attach --device --pretty
-lookin tree --device --depth 2 --pretty
+lookin tree --depth 2 --pretty
 ```
 
-The device port scanner probes the range 47175–47179. Ensure the device is connected via USB and trusted, and that the app is running in Debug configuration.
+With multiple USB devices, select one explicitly:
+
+```bash
+lookin attach --device --udid <device-udid> --pretty
+lookin doctor --device --udid <device-udid> --pretty
+```
+
+`attach` probes device ports 47175–47179 and saves the device UDID. Subsequent
+commands use that session and resolve the current usbmuxd device ID on each
+connection, so reconnecting USB does not leave a stale device ID. Each command
+closes its own connection when finished. LookinServer supports one client at a
+time; disconnect other Lookin clients before querying.
+
+Older sessions without a device UDID continue using their saved TCP endpoint.
+Run `lookin attach --device` to replace a forwarded session with a direct USB
+session. `lookin attach` without `--device` selects a simulator.
 
 ## Convention: Figma node join key
 

@@ -4,7 +4,7 @@ import Network
 public enum PortScanner {
     public enum Target {
         case simulator // 47164...47169
-        case device // 47175...47179, but normally already forwarded via iproxy
+        case device // 47175...47179 on the device
 
         public var range: ClosedRange<UInt16> {
             switch self {

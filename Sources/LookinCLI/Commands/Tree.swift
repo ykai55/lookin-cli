@@ -35,7 +35,7 @@ struct Tree: ParsableCommand {
     }
 
     static func fetchHierarchy(session: Session) async throws -> LookinHierarchyInfo {
-        let transport = PeertalkTransport(host: session.host, port: session.port)
+        let transport = try await session.transport()
         defer { Task { await transport.close() } }
 
         // Send ping first to establish the session on this connection.

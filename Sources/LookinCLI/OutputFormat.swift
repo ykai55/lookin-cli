@@ -71,6 +71,7 @@ func withRequestTimeout<T>(seconds: Double = 10, operation: @escaping () async t
 /// Spec §4.3: single retry on cold start.
 func resolveServer(
     target: PortScanner.Target,
+    deviceID: Int? = nil,
     timeoutSeconds: Double = 15,
     coldStartRetries: Int = 1,
     retryDelaySeconds: Double = 0.8,
@@ -78,6 +79,7 @@ func resolveServer(
     for port in target.range {
         if let result = await tryPing(
             port: port,
+            deviceID: deviceID,
             timeoutSeconds: timeoutSeconds,
             attemptsRemaining: coldStartRetries,
             retryDelaySeconds: retryDelaySeconds,
@@ -90,12 +92,13 @@ func resolveServer(
 
 private func tryPing(
     port: UInt16,
+    deviceID: Int?,
     timeoutSeconds: Double,
     attemptsRemaining: Int,
     retryDelaySeconds: Double,
 ) async -> (port: UInt16, serverVersion: Int)? {
-    let transport = PeertalkTransport(host: "127.0.0.1", port: port)
-    defer { Task { await transport.close() } }
+    let transport = deviceID.map { PeertalkTransport(deviceID: $0, port: port) }
+        ?? PeertalkTransport(host: "127.0.0.1", port: port)
     let payload = LookinConnectionAttachment()
     payload.dataType = LookinCodingValueType(rawValue: 4)! // LookinCodingValueTypeLongLong
     payload.data = NSNumber(value: LOOKIN_CLIENT_VERSION)
@@ -103,8 +106,10 @@ private func tryPing(
         let response = try await withRequestTimeout(seconds: timeoutSeconds) {
             try await transport.send(type: UInt32(LookinRequestTypePing), payload: payload)
         }
+        await transport.close()
         let serverVersion: Int
         if let resp = response as? LookinConnectionResponseAttachment {
+            if resp.error != nil { return nil }
             serverVersion = Int(resp.lookinServerVersion)
         } else if let n = response.data as? NSNumber {
             serverVersion = n.intValue
@@ -113,10 +118,12 @@ private func tryPing(
         }
         return (port, serverVersion)
     } catch {
-        if attemptsRemaining > 0 {
+        await transport.close()
+        if attemptsRemaining > 0, !Task.isCancelled {
             try? await Task.sleep(nanoseconds: UInt64(retryDelaySeconds * 1_000_000_000))
             return await tryPing(
                 port: port,
+                deviceID: deviceID,
                 timeoutSeconds: timeoutSeconds,
                 attemptsRemaining: attemptsRemaining - 1,
                 retryDelaySeconds: retryDelaySeconds,

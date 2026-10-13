@@ -4,6 +4,7 @@ import Network
 
 public final class PeertalkTransport: LookinTransport {
     private let connection: NWConnection
+    private let usbDestination: (deviceID: Int, port: UInt16)?
     private let queue = DispatchQueue(label: "lookin.peertalk")
     /// Start at a high tag to avoid collision with server-push streaming frame tags
     /// (the server continuously sends type=203 frames with tags 1, 3, etc.).
@@ -18,11 +19,17 @@ public final class PeertalkTransport: LookinTransport {
     private var startContinuation: CheckedContinuation<Void, Error>?
 
     public init(host: String, port: UInt16) {
+        usbDestination = nil
         let endpoint = NWEndpoint.hostPort(
             host: NWEndpoint.Host(host),
             port: NWEndpoint.Port(rawValue: port)!,
         )
         connection = NWConnection(to: endpoint, using: .tcp)
+    }
+
+    public init(deviceID: Int, port: UInt16) {
+        usbDestination = (deviceID, port)
+        connection = USBMux.connection()
     }
 
     public func start() async throws {
@@ -35,9 +42,22 @@ public final class PeertalkTransport: LookinTransport {
                     guard let self else { return }
                     switch state {
                     case .ready:
-                        startContinuation?.resume()
-                        startContinuation = nil
-                        scheduleReceive()
+                        if let destination = usbDestination {
+                            Task {
+                                do {
+                                    try await USBMux.connect(self.connection, deviceID: destination.deviceID, port: destination.port)
+                                    self.queue.async { self.finishStarting() }
+                                } catch {
+                                    self.queue.async {
+                                        self.startContinuation?.resume(throwing: error)
+                                        self.startContinuation = nil
+                                        self.connection.cancel()
+                                    }
+                                }
+                            }
+                        } else {
+                            finishStarting()
+                        }
                     case let .failed(err):
                         startContinuation?.resume(throwing: err)
                         startContinuation = nil
@@ -143,6 +163,13 @@ public final class PeertalkTransport: LookinTransport {
     }
 
     // MARK: - Private
+
+    private func finishStarting() {
+        guard let continuation = startContinuation else { return }
+        startContinuation = nil
+        scheduleReceive()
+        continuation.resume()
+    }
 
     private func encode(_ payload: LookinConnectionAttachment) -> Data {
         let archiver = NSKeyedArchiver(requiringSecureCoding: true)

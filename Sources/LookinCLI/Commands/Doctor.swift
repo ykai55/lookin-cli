@@ -14,6 +14,13 @@ struct Doctor: ParsableCommand {
     @Flag(name: .long, help: "Probe the device USB port range instead of the simulator range.")
     var device: Bool = false
 
+    @Option(name: .long, help: "USB device UDID (required when multiple devices are connected).")
+    var udid: String?
+
+    mutating func validate() throws {
+        if udid != nil, !device { throw ValidationError("--udid requires --device.") }
+    }
+
     // MARK: - Report shape
 
     /// Per-port diagnostic detail.
@@ -42,6 +49,11 @@ struct Doctor: ParsableCommand {
     }
 
     func run() throws {
+        if device {
+            let report = try runAsync { await Doctor.diagnoseUSB(udid: udid) }
+            try emit(report, options: output)
+            exitSuccess()
+        }
         let target: PortScanner.Target = device ? .device : .simulator
         let start = Date()
         let report = try runAsync {
@@ -52,6 +64,32 @@ struct Doctor: ParsableCommand {
     }
 
     // MARK: - Diagnosis
+
+    struct USBReport: Encodable {
+        let target = "device"
+        let transport = "usbmuxd"
+        let devices: [USBMux.Device]
+        let deviceUDID: String?
+        let reachable: Bool
+        let port: UInt16?
+        let serverVersion: Int?
+        let hint: String?
+    }
+
+    static func diagnoseUSB(udid: String?) async -> USBReport {
+        var devices: [USBMux.Device] = []
+        do {
+            devices = try await withRequestTimeout(seconds: 5) { try await USBMux.devices() }
+            let device = try USBMux.select(devices, udid: udid)
+            let result = await resolveServer(target: .device, deviceID: device.id, timeoutSeconds: 1, coldStartRetries: 0)
+            return USBReport(devices: devices, deviceUDID: device.udid, reachable: result != nil,
+                             port: result?.port, serverVersion: result?.serverVersion,
+                             hint: result == nil ? "USB device found, but LookinServer did not respond. Unlock the phone, keep the app in the foreground, and disconnect other Lookin clients." : nil)
+        } catch {
+            return USBReport(devices: devices, deviceUDID: udid, reachable: false,
+                             port: nil, serverVersion: nil, hint: error.localizedDescription)
+        }
+    }
 
     /// Overall budget for the whole scan. With fast-failing connections this is
     /// never hit in practice; exceeding it yields a distinct `scan_timed_out`.
@@ -168,8 +206,7 @@ struct Doctor: ParsableCommand {
 
         // Nothing listening anywhere in the range.
         let hint = device
-            ? "No LookinServer port is listening. Did you run `iproxy 47175 47175`, "
-            + "and is the app running in Debug?"
+            ? "No LookinServer port is listening on the TCP forward. Run `lookin attach --device` to connect directly over USB."
             : "No LookinServer port is listening. Check: (1) LookinServer is linked "
             + "and the app runs in Debug; (2) the app is foreground-active — a system "
             + "modal (e.g. the ATT prompt) delays LookinServer's listener until the "

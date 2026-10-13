@@ -75,16 +75,18 @@ is single-client and re-listens after every connection closes.
 
 | Command      | Purpose                                                         | Key options                                           |
 | ------------ | --------------------------------------------------------------- | ----------------------------------------------------- |
-| `doctor`     | Probe for a reachable LookinServer; print diagnostics.          | `--device`, `--pretty`                                |
-| `attach`     | Discover server, cache session to `~/.lookin-cli/session.json`. | `--device`, `--pretty`                                |
+| `doctor`     | Probe for a reachable LookinServer; print diagnostics.          | `--device`, `--udid <udid>`, `--pretty`                |
+| `attach`     | Discover server, cache session to `~/.lookin-cli/session.json`. | `--device`, `--udid <udid>`, `--pretty`                |
 | `tree`       | Print the full view hierarchy as JSON.                          | `--depth <n>` (default unlimited), `--pretty`         |
 | `find`       | Find views by substring on class / label / ax-id.               | `--by class\|label\|ax-id`, `--limit <n>`, `--pretty` |
 | `attributes` | Print all attribute groups for one view.                        | `--oid <n>` or `--ax-id <s>`, `--pretty`              |
 | `screenshot` | Save a PNG of a view/layer.                                     | `--view <oid>`, `-o/--out <path>`                     |
 | `measure`    | Geometric relationship between two elements.                    | `--tolerance <pt>`, `--annotate <path>`, `--pretty`   |
 
-Pass `--device` to `doctor`/`attach` for a USB-connected real device. First forward
-the port in a separate, long-lived terminal: `iproxy 47175 47175`.
+Pass `--device` to `doctor`/`attach` for a USB-connected real device. The CLI
+connects directly through macOS's usbmuxd service; no port forward is needed.
+Use `--udid <udid>` when multiple phones are connected. Subsequent commands use
+the saved device session without a `--device` flag.
 
 ## `lookin measure` — the design-comparison command
 
@@ -150,7 +152,8 @@ roots[].{ oid, class, axId?, figmaRef?, frame{x,y,width,height}, alpha, hidden, 
 ## Troubleshooting
 
 - **`reachable: false`** — the app isn't running, isn't in Debug, or doesn't embed
-  LookinServer. For a real device, confirm `iproxy 47175 47175` is still alive.
+  LookinServer. For a real device, run `lookin doctor --device` and confirm the
+  phone is connected, trusted, unlocked, and running the app in the foreground.
 - **Connection flakiness right after another command** — LookinServer is
   single-client and re-listens after each close. Retry once; `measure` already
   retries internally.
