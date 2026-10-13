@@ -63,6 +63,25 @@ lookin screenshot --view 4325478400 --out /tmp/x.png
 
 `--pretty` enables indented JSON output. Omit it for compact one-line JSON suitable for agent pipelines.
 
+## Invoke Objective-C getters
+
+```bash
+lookin invoke --oid 1918 --selector component --selector preventNativeDismiss --pretty
+lookin invoke --oid 1918 --selector component --selector controller --selector navigationController --selector interactivePopGestureRecognizer --selector delegate --pretty
+```
+
+`--oid` is a Lookin object ID from `tree`/`find` or a previous invocation result,
+not a memory address. Repeat `--selector` to follow returned objects on one
+connection. The JSON array includes each target OID, selector, return description,
+and returned object metadata (OID, address, class name). Primitive and nil results
+can terminate a chain but cannot be followed by another selector. IDs belong to
+the running app instance; rediscover them after the app restarts or views change.
+
+Only zero-argument methods are supported. This is not a read-only sandbox: a
+zero-argument method may still have side effects. Use getters when inspecting.
+Server errors and timeouts cause a nonzero exit status. LookinServer must be
+available exclusively to the CLI; disconnect the desktop Lookin client first.
+
 ## Real-device path
 
 For physical devices, forward the LookinServer port over USB before running any command:
