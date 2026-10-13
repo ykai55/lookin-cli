@@ -82,6 +82,15 @@ zero-argument method may still have side effects. Use getters when inspecting.
 Server errors and timeouts cause a nonzero exit status. LookinServer must be
 available exclusively to the CLI; disconnect the desktop Lookin client first.
 
+## Release downloads
+
+This fork publishes a universal macOS binary (Apple Silicon and Intel) at
+[lookin-latest](https://github.com/ykai55/lookin-cli/releases/tag/lookin-latest).
+Changes to the CLI on `main` run the tests, build both architectures, and update
+the release archive and its `.sha256` file. The workflow can also be run manually.
+
+`ykai55/dotfiles` installs and updates this binary through `dotfiles-apply`.
+
 ## Real-device path
 
 Connect and trust the iPhone over USB, unlock it, and keep the app containing

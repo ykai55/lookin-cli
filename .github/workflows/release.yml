@@ -1,0 +1,71 @@
+name: Release lookin
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - Sources/**
+      - Tests/**
+      - Package.swift
+      - Package.resolved
+      - .swift-version
+      - .github/workflows/release.yml
+  workflow_dispatch:
+
+concurrency:
+  group: lookin-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.0.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check Swift toolchain
+        run: |
+          set -euo pipefail
+          xcrun swift --version
+          xcrun swift --version | grep -F "Swift version $(cat .swift-version)"
+
+      - name: Test
+        run: xcrun swift test --force-resolved-versions
+
+      - name: Build universal release
+        run: |
+          set -euo pipefail
+          xcrun swift build -c release --arch arm64 --arch x86_64 --force-resolved-versions
+          binary_dir=$(xcrun swift build -c release --arch arm64 --arch x86_64 --show-bin-path)
+          mkdir -p dist
+          cp "$binary_dir/lookin" dist/lookin
+          lipo dist/lookin -verify_arch arm64 x86_64
+          codesign --force --sign - dist/lookin
+          dist/lookin --help
+          tar -C dist -czf lookin-macos-universal.tar.gz lookin
+          shasum -a 256 lookin-macos-universal.tar.gz > lookin-macos-universal.tar.gz.sha256
+
+      - name: Publish latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git tag -f lookin-latest "$GITHUB_SHA"
+          git push -f origin lookin-latest
+          notes="macOS universal binary (arm64 and x86_64), built from ${GITHUB_SHA}."
+          if gh release view lookin-latest >/dev/null 2>&1; then
+            gh release edit lookin-latest --title 'lookin latest' --notes "$notes" --latest
+          else
+            gh release create lookin-latest --verify-tag --title 'lookin latest' --notes "$notes" --latest
+          fi
+          gh release upload lookin-latest lookin-macos-universal.tar.gz lookin-macos-universal.tar.gz.sha256 --clobber
